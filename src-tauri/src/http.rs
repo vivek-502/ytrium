@@ -11,7 +11,8 @@ use std::time::Duration;
 use serde::de::DeserializeOwned;
 use ureq::Agent;
 
-const UA: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Ytrium/1.0";
+const UA: &str =
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Ytrium/1.0";
 
 /// Bodies larger than this are refused for JSON endpoints.
 const JSON_BODY_LIMIT: u64 = 8 * 1024 * 1024;

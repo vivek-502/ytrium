@@ -571,53 +571,53 @@ fn spawn_loader(
     let spawned = {
         let shared = shared.clone();
         builder.spawn(move || {
-        let opened = open_stream(&url, &video_id);
-        let (decoder, control, duration) = match opened {
-            Ok(parts) => parts,
-            Err(err) => {
-                shared.fail(seq, err.to_string());
+            let opened = open_stream(&url, &video_id);
+            let (decoder, control, duration) = match opened {
+                Ok(parts) => parts,
+                Err(err) => {
+                    shared.fail(seq, err.to_string());
+                    return;
+                }
+            };
+
+            // Publish the control handle for cancellation, unless a newer load has
+            // already claimed the engine.
+            if !shared.set_reader(seq, control.clone()) {
+                control.cancel();
                 return;
             }
-        };
 
-        // Publish the control handle for cancellation, unless a newer load has
-        // already claimed the engine.
-        if !shared.set_reader(seq, control.clone()) {
-            control.cancel();
-            return;
-        }
+            let guard = append_lock.lock().expect("append lock poisoned");
+            if shared.current_seq() != seq {
+                drop(guard);
+                control.cancel();
+                return;
+            }
 
-        let guard = append_lock.lock().expect("append lock poisoned");
-        if shared.current_seq() != seq {
+            let source = Normalized::new(decoder, normalize);
+            player.append(source);
             drop(guard);
-            control.cancel();
-            return;
-        }
 
-        let source = Normalized::new(decoder, normalize);
-        player.append(source);
-        drop(guard);
+            shared.appended_seq.store(seq, Ordering::SeqCst);
+            {
+                let mut status = shared.status.lock().expect("status poisoned");
+                status.duration = duration;
+                status.position = start_at.max(0.0);
+                status.state = if autoplay {
+                    Transport::Playing
+                } else {
+                    Transport::Paused
+                };
+            }
 
-        shared.appended_seq.store(seq, Ordering::SeqCst);
-        {
-            let mut status = shared.status.lock().expect("status poisoned");
-            status.duration = duration;
-            status.position = start_at.max(0.0);
-            status.state = if autoplay {
-                Transport::Playing
+            if start_at > 0.0 {
+                let _ = seek_tx.send(Duration::from_secs_f64(start_at));
+            }
+            if autoplay {
+                player.play();
             } else {
-                Transport::Paused
-            };
-        }
-
-        if start_at > 0.0 {
-            let _ = seek_tx.send(Duration::from_secs_f64(start_at));
-        }
-        if autoplay {
-            player.play();
-        } else {
-            player.pause();
-        }
+                player.pause();
+            }
         })
     };
 

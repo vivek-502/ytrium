@@ -14,8 +14,8 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::audio::{AudioEngine, PlayerStatus};
 use crate::error::{ApiError, ApiResult};
-use crate::providers::{charts, lyrics, recommend, youtube};
 use crate::providers::lyrics::LyricsLookup;
+use crate::providers::{charts, lyrics, recommend, youtube};
 
 /* --------------------------------- helpers -------------------------------- */
 
@@ -85,7 +85,8 @@ fn strip_control(input: &str) -> String {
 }
 
 fn sanitize_query(value: Option<&str>, max_length: usize) -> ApiResult<String> {
-    let value = value.ok_or_else(|| ApiError::invalid_input(Some("query must be a string".into())))?;
+    let value =
+        value.ok_or_else(|| ApiError::invalid_input(Some("query must be a string".into())))?;
     let cleaned = strip_control(value).trim().to_string();
     if cleaned.is_empty() {
         return Err(ApiError::invalid_input(Some("query is required".into())));
@@ -108,9 +109,9 @@ fn parse_limit(value: Option<&str>, fallback: usize, max: usize) -> ApiResult<us
     match value.map(str::trim).filter(|v| !v.is_empty()) {
         None => Ok(fallback),
         Some(raw) => {
-            let parsed: f64 = raw
-                .parse()
-                .map_err(|_| ApiError::invalid_input(Some("limit must be a positive number".into())))?;
+            let parsed: f64 = raw.parse().map_err(|_| {
+                ApiError::invalid_input(Some("limit must be a positive number".into()))
+            })?;
             if !parsed.is_finite() || parsed < 1.0 {
                 return Err(ApiError::invalid_input(Some(
                     "limit must be a positive number".into(),
@@ -204,13 +205,16 @@ async fn search(params: &HashMap<String, String>) -> ApiResult<Value> {
 }
 
 async fn resolve(params: &HashMap<String, String>, body: &Value) -> ApiResult<Value> {
-    let raw_id = body
-        .get("id")
+    let raw_id = body.get("id").and_then(Value::as_str).map(str::to_string);
+    let body_q = body.get("q").and_then(Value::as_str).map(str::to_string);
+    let title = body
+        .get("title")
         .and_then(Value::as_str)
         .map(str::to_string);
-    let body_q = body.get("q").and_then(Value::as_str).map(str::to_string);
-    let title = body.get("title").and_then(Value::as_str).map(str::to_string);
-    let artist = body.get("artist").and_then(Value::as_str).map(str::to_string);
+    let artist = body
+        .get("artist")
+        .and_then(Value::as_str)
+        .map(str::to_string);
 
     if let Some(id) = raw_id.as_deref().map(str::trim).filter(|i| !i.is_empty()) {
         if let Some(track) = youtube::get_track(id).await? {
@@ -261,13 +265,13 @@ async fn track(raw_id: &str) -> ApiResult<Value> {
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, ':' | '_' | ',' | '-'));
     if !valid {
-        return Err(ApiError::invalid_input(Some("invalid track id".to_string())));
+        return Err(ApiError::invalid_input(Some(
+            "invalid track id".to_string(),
+        )));
     }
     match youtube::get_track(id).await? {
         Some(track) => Ok(json!({ "track": track })),
-        None => Err(ApiError::not_found(
-            "Track metadata could not be found.",
-        )),
+        None => Err(ApiError::not_found("Track metadata could not be found.")),
     }
 }
 
@@ -285,11 +289,7 @@ async fn artist(params: &HashMap<String, String>) -> ApiResult<Value> {
 
     let tracks = crate::providers::dedupe_tracks(main.tracks.clone());
     let mut popular = tracks.clone();
-    popular.sort_by(|a, b| {
-        b.view_count
-            .unwrap_or(0)
-            .cmp(&a.view_count.unwrap_or(0))
-    });
+    popular.sort_by_key(|a| std::cmp::Reverse(a.view_count.unwrap_or(0)));
 
     let mut albums: Vec<crate::providers::Album> = Vec::new();
     for t in &tracks {
@@ -402,7 +402,12 @@ async fn trending(params: &HashMap<String, String>) -> ApiResult<Value> {
 async fn recommendations(params: &HashMap<String, String>) -> ApiResult<Value> {
     let raw = params.get("seeds").map(String::as_str).unwrap_or("");
     let mut seeds: Vec<String> = Vec::new();
-    for seed in raw.split(',').map(str::trim).filter(|s| !s.is_empty()).take(6) {
+    for seed in raw
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .take(6)
+    {
         seeds.push(sanitize_query(Some(seed), 80)?);
     }
     let limit = parse_limit(params.get("limit").map(String::as_str), 20, 40)?;
@@ -442,7 +447,9 @@ async fn lyrics_route(params: &HashMap<String, String>) -> ApiResult<Value> {
 async fn stream_meta(id: &str, params: &HashMap<String, String>) -> ApiResult<Value> {
     let video_id = id.strip_prefix("yt:").unwrap_or(id);
     if !crate::ytdlp::is_valid_video_id(video_id) {
-        return Err(ApiError::invalid_input(Some("invalid stream id".to_string())));
+        return Err(ApiError::invalid_input(Some(
+            "invalid stream id".to_string(),
+        )));
     }
     let quality = youtube::normalize_quality(params.get("q").map(String::as_str));
     // Warm the provider cache exactly like the web build's prefetch did.

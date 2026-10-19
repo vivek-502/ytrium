@@ -55,9 +55,7 @@ pub struct LyricsLookup {
 static LYRICS_CACHE: OnceLock<TtlCache<Option<LyricsResult>>> = OnceLock::new();
 
 fn lyrics_cache() -> &'static TtlCache<Option<LyricsResult>> {
-    LYRICS_CACHE.get_or_init(|| {
-        TtlCache::new(config::LYRICS_TTL, config::LYRICS_MAX_ENTRIES)
-    })
+    LYRICS_CACHE.get_or_init(|| TtlCache::new(config::LYRICS_TTL, config::LYRICS_MAX_ENTRIES))
 }
 
 /* ---------------------------------- regex --------------------------------- */
@@ -133,7 +131,10 @@ fn urlencoding(value: &str) -> String {
 
 /// Exact-title lookup. 404 means "no exact match", not an outage.
 fn lrclib_exact(artist: &str, title: &str) -> Result<Option<LrclibEntry>, http::FetchError> {
-    match lrclib_get("/api/get", &[("artist_name", artist), ("track_name", title)]) {
+    match lrclib_get(
+        "/api/get",
+        &[("artist_name", artist), ("track_name", title)],
+    ) {
         Ok(text) => Ok(serde_json::from_str::<LrclibEntry>(&text).ok()),
         Err(http::FetchError::Status(404)) => Ok(None),
         Err(other) => Err(other),
@@ -152,7 +153,11 @@ fn lrclib_search(artist: &str, title: &str) -> Result<Vec<LrclibEntry>, http::Fe
 fn pick_best<'a>(entries: &'a [LrclibEntry], lookup: &LyricsLookup) -> Option<&'a LrclibEntry> {
     let want_artist = normalize_key(&lookup.artist);
     let want_title = normalize_key(&lookup.title);
-    let want_album = lookup.album.as_deref().map(normalize_key).unwrap_or_default();
+    let want_album = lookup
+        .album
+        .as_deref()
+        .map(normalize_key)
+        .unwrap_or_default();
     let want_duration = lookup.duration.unwrap_or(0) as f64;
 
     let mut best: Option<&LrclibEntry> = None;
@@ -249,7 +254,11 @@ pub fn parse_lrc(lrc: &str) -> Vec<SyncedLine> {
             });
         }
     }
-    out.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
+    out.sort_by(|a, b| {
+        a.time
+            .partial_cmp(&b.time)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     out
 }
 
@@ -321,9 +330,13 @@ fn lrclib_to_result(entry: &LrclibEntry) -> Option<LyricsResult> {
         .map(parse_lrc)
         .filter(|lines| !lines.is_empty());
     let plain_text = clean_plain(entry.plain_lyrics.as_deref()).or_else(|| {
-        synced
-            .as_ref()
-            .map(|lines| lines.iter().map(|l| l.text.clone()).collect::<Vec<_>>().join("\n"))
+        synced.as_ref().map(|lines| {
+            lines
+                .iter()
+                .map(|l| l.text.clone())
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
     });
     if !instrumental && plain_text.is_none() {
         return None;
@@ -452,7 +465,13 @@ async fn youtube_caption_lyrics(video_id: &str) -> Option<LyricsResult> {
         Some(LyricsResult {
             source: "youtube-captions".to_string(),
             instrumental: false,
-            plain_text: Some(synced.iter().map(|l| l.text.clone()).collect::<Vec<_>>().join("\n")),
+            plain_text: Some(
+                synced
+                    .iter()
+                    .map(|l| l.text.clone())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ),
             synced: Some(synced),
             track_name: None,
             artist_name: None,

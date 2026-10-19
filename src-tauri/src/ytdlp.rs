@@ -48,10 +48,7 @@ pub async fn run_ytdlp(args: &[&str], timeout: Duration) -> ApiResult<String> {
 
     let mut child = cmd.spawn().map_err(|err| {
         if err.kind() == std::io::ErrorKind::NotFound {
-            ApiError::ytdlp_missing(Some(format!(
-                "could not run `{}`",
-                config::ytdlp_path()
-            )))
+            ApiError::ytdlp_missing(Some(format!("could not run `{}`", config::ytdlp_path())))
         } else {
             ApiError::extraction_failed(Some(format!("could not start yt-dlp: {err}")))
         }
@@ -128,7 +125,9 @@ pub fn classify_failure(stderr: &str, code: Option<i32>) -> ApiError {
     let s = stderr.to_lowercase();
     let slice = || Some(stderr.chars().take(400).collect::<String>());
 
-    if s.contains("video unavailable") || s.contains("account associated with this video has been terminated") {
+    if s.contains("video unavailable")
+        || s.contains("account associated with this video has been terminated")
+    {
         return ApiError::video_unavailable(slice());
     }
     if s.contains("private video") || s.contains("sign in to confirm") || s.contains("age") {
@@ -154,7 +153,8 @@ pub fn classify_failure(stderr: &str, code: Option<i32>) -> ApiError {
     }
     ApiError::extraction_failed(Some(format!(
         "yt-dlp exit {}",
-        code.map(|c| c.to_string()).unwrap_or_else(|| "signal".into())
+        code.map(|c| c.to_string())
+            .unwrap_or_else(|| "signal".into())
     )))
 }
 

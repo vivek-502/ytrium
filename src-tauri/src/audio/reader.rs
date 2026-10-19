@@ -199,12 +199,7 @@ impl RangeReader {
     }
 }
 
-fn download_loop<B: Read>(
-    state: Arc<ReaderState>,
-    mut body: B,
-    url: String,
-    video_id: String,
-) {
+fn download_loop<B: Read>(state: Arc<ReaderState>, mut body: B, url: String, video_id: String) {
     let mut chunk = vec![0u8; 64 * 1024];
     loop {
         if state.cancelled.load(Ordering::SeqCst) {

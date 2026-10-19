@@ -158,7 +158,8 @@ fn last_image(entry: &RssEntry) -> Option<String> {
         OneOrMany::One(one) => vec![one.clone()],
         OneOrMany::Many(many) => many.clone(),
     };
-    list.last().and_then(|img| upgrade_artwork(img.label.as_deref()))
+    list.last()
+        .and_then(|img| upgrade_artwork(img.label.as_deref()))
 }
 
 /// The alternate (web) link for an entry. The top-songs feed repeats `link` as
@@ -241,7 +242,10 @@ fn lookup_tracks(ids: &[i64]) -> HashMap<i64, LookupTrack> {
                 }
             }
             Err(err) => {
-                eprintln!("[charts] itunes lookup enrichment failed: {}", err.message());
+                eprintln!(
+                    "[charts] itunes lookup enrichment failed: {}",
+                    err.message()
+                );
             }
         }
     }
@@ -262,15 +266,13 @@ fn song_from_rss(entry: &RssEntry, detail: Option<&LookupTrack>) -> Option<Track
         .and_then(|d| d.artist_name.clone())
         .or_else(|| entry.artist.as_ref().and_then(|a| a.label.clone()))
         .unwrap_or_else(|| "Unknown Artist".to_string());
-    let album = detail
-        .and_then(|d| d.collection_name.clone())
-        .or_else(|| {
-            entry
-                .collection
-                .as_ref()
-                .and_then(|c| c.name.as_ref())
-                .and_then(|n| n.label.clone())
-        });
+    let album = detail.and_then(|d| d.collection_name.clone()).or_else(|| {
+        entry
+            .collection
+            .as_ref()
+            .and_then(|c| c.name.as_ref())
+            .and_then(|n| n.label.clone())
+    });
     let genre = detail
         .and_then(|d| d.primary_genre_name.clone())
         .or_else(|| {
@@ -281,7 +283,11 @@ fn song_from_rss(entry: &RssEntry, detail: Option<&LookupTrack>) -> Option<Track
                 .and_then(|a| a.label.clone())
         });
     let release_date = detail
-        .and_then(|d| d.release_date.as_deref().map(|r| r.chars().take(10).collect::<String>()))
+        .and_then(|d| {
+            d.release_date
+                .as_deref()
+                .map(|r| r.chars().take(10).collect::<String>())
+        })
         .or_else(|| release_label(entry));
     let artwork = detail
         .and_then(|d| upgrade_artwork(d.artwork_url100.as_deref()))
@@ -396,7 +402,10 @@ fn lookup_album_songs(album_ids: &[i64]) -> Vec<Track> {
                 }
             }
             Err(err) => {
-                eprintln!("[charts] itunes album song lookup failed: {}", err.message());
+                eprintln!(
+                    "[charts] itunes album song lookup failed: {}",
+                    err.message()
+                );
             }
         }
     }
@@ -430,7 +439,13 @@ fn derive_artists(songs: &[Track], albums: &[Album]) -> Vec<Artist> {
     let mut map: HashMap<String, Artist> = HashMap::new();
     for s in songs {
         if let Some(id) = s.artist_id.clone() {
-            push(&mut order, &mut map, id, s.artist.clone(), s.thumbnail.clone());
+            push(
+                &mut order,
+                &mut map,
+                id,
+                s.artist.clone(),
+                s.thumbnail.clone(),
+            );
         }
     }
     for a in albums {
@@ -445,10 +460,14 @@ fn derive_artists(songs: &[Track], albums: &[Album]) -> Vec<Artist> {
 
 async fn itunes_charts() -> ApiResult<ChartsResult> {
     let base = charts_base();
-    let songs_feed = fetch_json::<RssFeed>(&format!("{base}/rss/topsongs/limit=30/json"))
-        .map_err(|e| ApiError::upstream_unavailable(Some(format!("charts http {}", e.message()))))?;
+    let songs_feed =
+        fetch_json::<RssFeed>(&format!("{base}/rss/topsongs/limit=30/json")).map_err(|e| {
+            ApiError::upstream_unavailable(Some(format!("charts http {}", e.message())))
+        })?;
     let albums_feed = fetch_json::<RssFeed>(&format!("{base}/rss/topalbums/limit=20/json"))
-        .map_err(|e| ApiError::upstream_unavailable(Some(format!("charts http {}", e.message()))))?;
+        .map_err(|e| {
+            ApiError::upstream_unavailable(Some(format!("charts http {}", e.message())))
+        })?;
 
     let song_entries = entries_of(songs_feed);
     let album_entries = entries_of(albums_feed);
@@ -564,7 +583,10 @@ async fn ytdlp_charts() -> ApiResult<ChartsResult> {
                     .filter(|u| !u.is_empty())
                     .unwrap_or("Unknown Artist"),
             );
-            let raw_title = entry.title.clone().unwrap_or_else(|| "Untitled".to_string());
+            let raw_title = entry
+                .title
+                .clone()
+                .unwrap_or_else(|| "Untitled".to_string());
             collected.push(Track {
                 id: format!("yt:{id}"),
                 source: "youtube".to_string(),
@@ -574,7 +596,11 @@ async fn ytdlp_charts() -> ApiResult<ChartsResult> {
                 artist,
                 album: None,
                 album_id: None,
-                duration: entry.duration.filter(|d| *d > 0.0).map(|d| d.round() as u32).unwrap_or(0),
+                duration: entry
+                    .duration
+                    .filter(|d| *d > 0.0)
+                    .map(|d| d.round() as u32)
+                    .unwrap_or(0),
                 thumbnail: Some(super::thumbnail_for(&id)),
                 view_count: entry.view_count.map(|v| v.round() as i64),
                 genre: None,

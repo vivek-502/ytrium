@@ -52,7 +52,10 @@ async fn search_requires_a_query() {
     let err = api::dispatch("GET", "/api/search?limit=0&q=x", None)
         .await
         .unwrap_err();
-    assert_eq!(err.detail.as_deref(), Some("limit must be a positive number"));
+    assert_eq!(
+        err.detail.as_deref(),
+        Some("limit must be a positive number")
+    );
 }
 
 #[tokio::test]
@@ -78,9 +81,13 @@ async fn track_metadata_and_id_validation() {
 
 #[tokio::test]
 async fn resolve_by_id_and_by_query() {
-    let by_id = api::dispatch("POST", "/api/resolve", Some(json!({ "id": "yt:dQw4w9WgXcQ" })))
-        .await
-        .expect("resolve by id failed");
+    let by_id = api::dispatch(
+        "POST",
+        "/api/resolve",
+        Some(json!({ "id": "yt:dQw4w9WgXcQ" })),
+    )
+    .await
+    .expect("resolve by id failed");
     assert_eq!(by_id["track"]["sourceId"], json!("dQw4w9WgXcQ"));
 
     let by_query = api::dispatch(
@@ -109,7 +116,10 @@ async fn charts_trending_and_recommendations() {
         charts["chartsSource"],
         charts["trending"].as_array().map(Vec::len).unwrap_or(0),
         charts["popular"].as_array().map(Vec::len).unwrap_or(0),
-        charts["popularAlbums"].as_array().map(Vec::len).unwrap_or(0)
+        charts["popularAlbums"]
+            .as_array()
+            .map(Vec::len)
+            .unwrap_or(0)
     );
     assert!(!charts["trending"].as_array().unwrap().is_empty());
     // A decode regression in the iTunes feed should fail here, not silently
@@ -121,10 +131,17 @@ async fn charts_trending_and_recommendations() {
         .expect("trending failed");
     assert_eq!(trending["tracks"].as_array().unwrap().len(), 3);
 
-    let recs = api::dispatch("GET", "/api/recommendations?seeds=daft%20punk&limit=5", None)
-        .await
-        .expect("recommendations failed");
-    println!("[recommendations] {} tracks", recs["tracks"].as_array().unwrap().len());
+    let recs = api::dispatch(
+        "GET",
+        "/api/recommendations?seeds=daft%20punk&limit=5",
+        None,
+    )
+    .await
+    .expect("recommendations failed");
+    println!(
+        "[recommendations] {} tracks",
+        recs["tracks"].as_array().unwrap().len()
+    );
     assert!(!recs["tracks"].as_array().unwrap().is_empty());
 }
 
@@ -187,11 +204,7 @@ async fn decoder_reads_and_seeks() {
         .expect("could not resolve a media url");
     println!(
         "[decode] url host={} contentType={:?}",
-        source
-            .url
-            .split('/')
-            .nth(2)
-            .unwrap_or("?"),
+        source.url.split('/').nth(2).unwrap_or("?"),
         source.content_type
     );
 
@@ -206,7 +219,7 @@ async fn decoder_reads_and_seeks() {
     let mut decoded = 0usize;
     let mut audible = 0usize;
     let mut peak = 0f32;
-    while let Some(sample) = decoder.next() {
+    for sample in decoder.by_ref() {
         if sample.abs() > 1e-5 {
             audible += 1;
             peak = peak.max(sample.abs());

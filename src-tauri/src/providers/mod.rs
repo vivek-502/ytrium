@@ -116,8 +116,7 @@ static NOISE_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     .collect()
 });
 
-static MULTI_SPACE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\s{2,}").expect("space regex"));
+static MULTI_SPACE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\s{2,}").expect("space regex"));
 static DANGLING_DASH: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\s+[-–]\s*$").expect("dash regex"));
 static NON_ALNUM: LazyLock<Regex> =

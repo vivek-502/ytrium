@@ -11,8 +11,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::Deserialize;
 
 use super::{
-    album_id_for, artist_id_for, build_search_results, clean_title, split_title, thumbnail_for,
-    strip_topic, SearchResults, StreamSource, Track,
+    album_id_for, artist_id_for, build_search_results, clean_title, split_title, strip_topic,
+    thumbnail_for, SearchResults, StreamSource, Track,
 };
 use crate::cache::TtlCache;
 use crate::config;
@@ -154,11 +154,8 @@ fn from_full(e: &Entry, fallback_id: &str) -> Option<Track> {
         .map(str::trim)
         .filter(|a| !a.is_empty())
         .map(str::to_string);
-    let release_date = super::normalize_date(
-        e.release_date
-            .as_deref()
-            .or(e.upload_date.as_deref()),
-    );
+    let release_date =
+        super::normalize_date(e.release_date.as_deref().or(e.upload_date.as_deref()));
     let genre = e
         .genre
         .as_deref()
@@ -269,7 +266,9 @@ pub const QUALITIES: [&str; 3] = ["auto", "low", "high"];
 /// yt-dlp selectors: `low` caps bitrate so slow links start faster.
 fn quality_format(quality: &str) -> &'static str {
     match quality {
-        "low" => "bestaudio[abr<=96][ext=m4a]/bestaudio[abr<=96]/bestaudio[ext=m4a]/bestaudio/best/best",
+        "low" => {
+            "bestaudio[abr<=96][ext=m4a]/bestaudio[abr<=96]/bestaudio[ext=m4a]/bestaudio/best/best"
+        }
         _ => "bestaudio[ext=m4a]/bestaudio/best/best",
     }
 }
@@ -368,4 +367,3 @@ fn now_ms() -> i64 {
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0)
 }
-

@@ -37,11 +37,7 @@ pub async fn get_recommendations(seeds: &[String], limit: usize) -> ApiResult<Ve
         .filter(|s| !s.is_empty())
         .take(4)
         .collect();
-    let key = format!(
-        "rec::{}::{}",
-        normalized.join("|").to_lowercase(),
-        limit
-    );
+    let key = format!("rec::{}::{}", normalized.join("|").to_lowercase(), limit);
     if let Some(hit) = recommendation_cache().get(&key) {
         return Ok(hit);
     }
