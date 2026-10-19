@@ -87,12 +87,15 @@ jobs:
       - name: Build the release binary
         run: npm exec -- tauri build --no-bundle --target ${{ matrix.target }}
 
+      # The raw binary goes in its own subdirectory: a flat dist-bin/ makes the
+      # glob for "ytrium-linux-x64" ambiguous against "ytrium-linux-x64.tar.gz",
+      # and the uploader silently drops the binary.
       - name: Stage the portable binary
         run: |
-          mkdir -p dist-bin
+          mkdir -p dist-bin/bin
           install -m 0755 "src-tauri/target/${{ matrix.target }}/release/ytrium" \
-            "dist-bin/ytrium-linux-${{ matrix.arch }}"
-          ( cd dist-bin && sha256sum "ytrium-linux-${{ matrix.arch }}" \
+            "dist-bin/bin/ytrium-linux-${{ matrix.arch }}"
+          ( cd dist-bin/bin && sha256sum "ytrium-linux-${{ matrix.arch }}" \
               > "ytrium-linux-${{ matrix.arch }}.sha256" )
 
       - name: Build the portable tarball
@@ -105,31 +108,28 @@ jobs:
       - name: Collect the Debian package
         if: matrix.arch == 'x64'
         run: |
-          cp "src-tauri/target/${{ matrix.target }}/release/bundle/deb/"*.deb dist-bin/
-          ( cd dist-bin && sha256sum *.deb > "$(ls *.deb).sha256" )
+          mkdir -p dist-bin/deb
+          cp "src-tauri/target/${{ matrix.target }}/release/bundle/deb/"*.deb dist-bin/deb/
+          ( cd dist-bin/deb && sha256sum *.deb > "$(ls *.deb).sha256" )
 
       - uses: actions/upload-artifact@v4
         with:
           name: ytrium-linux-${{ matrix.arch }}
           path: |
-            dist-bin/ytrium-linux-${{ matrix.arch }}
-            dist-bin/ytrium-linux-${{ matrix.arch }}.sha256
-            dist-bin/ytrium-linux-${{ matrix.arch }}.tar.gz
-            dist-bin/ytrium-linux-${{ matrix.arch }}.tar.gz.sha256
-            dist-bin/*.deb
-            dist-bin/*.deb.sha256
+            dist-bin/bin/*
+            dist-bin/*.tar.gz
+            dist-bin/*.tar.gz.sha256
+            dist-bin/deb/*
 
       - name: Attach to the GitHub release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist-bin/ytrium-linux-${{ matrix.arch }}
-            dist-bin/ytrium-linux-${{ matrix.arch }}.sha256
-            dist-bin/ytrium-linux-${{ matrix.arch }}.tar.gz
-            dist-bin/ytrium-linux-${{ matrix.arch }}.tar.gz.sha256
-            dist-bin/*.deb
-            dist-bin/*.deb.sha256
+            dist-bin/bin/*
+            dist-bin/*.tar.gz
+            dist-bin/*.tar.gz.sha256
+            dist-bin/deb/*
           generate_release_notes: true
 
   windows:

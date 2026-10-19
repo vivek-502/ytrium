@@ -62,7 +62,10 @@ fi
 
 # ------------------------------------------------------------------- assemble
 NAME="ytrium-linux-${ARCH}"
-STAGE="$OUT_DIR/$NAME"
+# Stage under a subdirectory so that only the tarball itself lands in $OUT_DIR:
+# a sibling "ytrium-linux-x64/" directory next to "ytrium-linux-x64.tar.gz"
+# makes release-upload globs ambiguous.
+STAGE="$OUT_DIR/stage/$NAME"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
 
@@ -88,8 +91,9 @@ printf 'Ytrium %s portable (linux-%s)\n\nRun ./ytrium - no installer and no root
 
 # --------------------------------------------------------------------- tarball
 echo "==> packing ${NAME}.tar.gz"
-tar -C "$OUT_DIR" -czf "$OUT_DIR/${NAME}.tar.gz" "$NAME"
+tar -C "$OUT_DIR/stage" -czf "$OUT_DIR/${NAME}.tar.gz" "$NAME"
 sha256sum "$OUT_DIR/${NAME}.tar.gz" | sed "s#${OUT_DIR}/##" >"$OUT_DIR/${NAME}.tar.gz.sha256"
+rm -rf "$OUT_DIR/stage"
 
 echo
 echo "==> done"
