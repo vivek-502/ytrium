@@ -30,7 +30,7 @@
     "longDescription": "Ytrium is a local-first desktop music player: search the web for music, queue it, organise it into playlists and play it back.",
     "linux": {
       "deb": {
-        "depends": ["yt-dlp", "ffmpeg"]
+        "depends": ["yt-dlp", "libasound2"]
       }
     }
   }
