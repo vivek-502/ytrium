@@ -8,6 +8,7 @@ src-tauri/gen/schemas/
 
 # Packaging output
 packaging/dist/
+dist-bin/
 
 # Local test artifacts
 test-artifacts/
