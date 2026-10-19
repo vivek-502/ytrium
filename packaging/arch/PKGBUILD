@@ -1,0 +1,43 @@
+# Maintainer: Vivek <https://github.com/vivek-502>
+# Build from the source repository (this PKGBUILD sits in packaging/arch/ of it):
+#
+#   git clone https://github.com/vivek-502/ytrium && cd ytrium
+#   cp packaging/arch/PKGBUILD . && makepkg -si
+#
+# Building from source, rather than downloading a prebuilt binary, is what the
+# Arch guidelines expect; it compiles the same Rust app the releases ship.
+pkgname=ytrium
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Local-first desktop music player (Tauri 2 + Rust)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/vivek-502/ytrium"
+license=('MIT')
+depends=('webkit2gtk-4.1' 'gtk3' 'yt-dlp')
+optdepends=('ffmpeg: format remuxing for yt-dlp')
+makedepends=('git' 'nodejs' 'npm' 'rust' 'cargo' 'base-devel')
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/vivek-502/ytrium/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+prepare() {
+  cd "${pkgname}-${pkgver}"
+  # The `tauri` npm CLI is a dependency of the repository, so no global install
+  # is needed. Nothing is fetched from the network at build time.
+  npm install --no-audit --no-fund
+}
+
+build() {
+  cd "${pkgname}-${pkgver}"
+  export CARGO_NET_OFFLINE=false
+  npm run build
+  npm exec -- tauri build --no-bundle
+}
+
+package() {
+  cd "${pkgname}-${pkgver}"
+  install -Dm755 src-tauri/target/release/ytrium "${pkgdir}/usr/bin/ytrium"
+  install -Dm644 packaging/ytrium.png \
+    "${pkgdir}/usr/share/icons/hicolor/256x256/apps/ytrium.png"
+  install -Dm644 packaging/ytrium.desktop \
+    "${pkgdir}/usr/share/applications/ytrium.desktop"
+}

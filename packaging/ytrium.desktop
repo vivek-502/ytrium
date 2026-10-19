@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Ytrium
+GenericName=Music Player
+Comment=Local-first music player
+Exec=ytrium %U
+Icon=ytrium
+Terminal=false
+Categories=AudioVideo;Audio;Player;Music;
+Keywords=music;player;audio;streaming;local;ytrium;
+StartupWMClass=ytrium
+StartupNotify=true

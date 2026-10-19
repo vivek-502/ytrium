@@ -1,0 +1,35 @@
+name: Feature request
+description: Suggest an idea for Ytrium
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ytrium is deliberately local-first and has no server component. Requests that need a
+        backend, accounts or cloud sync are out of scope — everything else is fair game.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation you are in today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+    validations:
+      required: false
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: This works entirely offline / on-device (no server, no account)
+          required: true

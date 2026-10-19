@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: yt-dlp troubleshooting
+    url: https://github.com/yt-dlp/yt-dlp/wiki/FAQ
+    about: Search or playback failing is usually a stale yt-dlp — update it with `yt-dlp -U`.
+  - name: The browser/self-hosted build
+    url: https://github.com/vivek-502/ytrium-web
+    about: Issues with the web build (accounts, systemd service, LAN access) belong there.

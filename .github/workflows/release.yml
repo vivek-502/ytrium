@@ -1,0 +1,168 @@
+name: Release
+
+# Publishes everything for a version on every v* tag:
+#   git tag v1.0.0 && git push origin v1.0.0
+#
+#   ytrium-linux-x64 / ytrium-linux-arm64          portable binaries (+ .sha256)
+#   ytrium-linux-<arch>.tar.gz                     portable bundle: binary, icon,
+#                                                  example desktop entry, helper
+#   Ytrium_<version>_amd64.deb                     Debian/Ubuntu package
+#   Ytrium_<version>_x64-setup.exe                 Windows NSIS installer
+#
+# Each platform is built on its own runner, so nothing is cross-compiled.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    name: Linux (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: x64
+            target: x86_64-unknown-linux-gnu
+          # ARM64 runners are free for public repositories.
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            target: aarch64-unknown-linux-gnu
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Ubuntu 22.04 is the baseline: the glibc it links against runs on 22.04
+      # and newer. Tauri 2 needs the webkit2gtk-4.1, appindicator, rsvg and
+      # patchelf bits below to build and to bundle.
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential \
+            curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build UI
+        run: npm run build
+
+      # --no-bundle because the deb below is built separately for x64 only.
+      - name: Build the release binary
+        run: npm exec -- tauri build --no-bundle --target ${{ matrix.target }}
+
+      - name: Stage the portable binary
+        run: |
+          mkdir -p dist-bin
+          install -m 0755 "src-tauri/target/${{ matrix.target }}/release/ytrium" \
+            "dist-bin/ytrium-linux-${{ matrix.arch }}"
+          ( cd dist-bin && sha256sum "ytrium-linux-${{ matrix.arch }}" \
+              > "ytrium-linux-${{ matrix.arch }}.sha256" )
+
+      - name: Build the portable tarball
+        run: bash packaging/make-portable.sh --target ${{ matrix.target }}
+
+      - name: Build the Debian package
+        if: matrix.arch == 'x64'
+        run: npm exec -- tauri build --bundles deb --target ${{ matrix.target }}
+
+      - name: Collect the Debian package
+        if: matrix.arch == 'x64'
+        run: |
+          cp "src-tauri/target/${{ matrix.target }}/release/bundle/deb/"*.deb dist-bin/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ytrium-linux-${{ matrix.arch }}
+          path: |
+            dist-bin/ytrium-linux-${{ matrix.arch }}
+            dist-bin/ytrium-linux-${{ matrix.arch }}.sha256
+            dist-bin/ytrium-linux-${{ matrix.arch }}.tar.gz
+            dist-bin/ytrium-linux-${{ matrix.arch }}.tar.gz.sha256
+            dist-bin/*.deb
+
+      - name: Attach to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-bin/ytrium-linux-${{ matrix.arch }}
+            dist-bin/ytrium-linux-${{ matrix.arch }}.sha256
+            dist-bin/ytrium-linux-${{ matrix.arch }}.tar.gz
+            dist-bin/ytrium-linux-${{ matrix.arch }}.tar.gz.sha256
+            dist-bin/*.deb
+          generate_release_notes: true
+
+  windows:
+    name: Windows (x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # Builds the app and the NSIS installer (Ytrium_<version>_x64-setup.exe,
+      # plus an .msi when WiX is available on the runner).
+      - name: Build the Windows installers
+        run: npm exec -- tauri build
+
+      - name: Checksums
+        shell: bash
+        working-directory: src-tauri/target/release/bundle
+        run: |
+          find . -type f \( -name '*.exe' -o -name '*.msi' \) -print0 |
+            xargs -0 sha256sum > "$GITHUB_WORKSPACE/windows-sha256.txt"
+          cat "$GITHUB_WORKSPACE/windows-sha256.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ytrium-windows-x64
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
+            windows-sha256.txt
+
+      - name: Attach to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
+            windows-sha256.txt
+          generate_release_notes: true

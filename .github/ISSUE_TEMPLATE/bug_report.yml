@@ -1,0 +1,61 @@
+name: Bug report
+description: Something in Ytrium does not work
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Ytrium drives `yt-dlp` for search and playback, so please
+        check `yt-dlp --version` (and try `yt-dlp -U`) before filing.
+  - type: input
+    id: app-version
+    attributes:
+      label: Ytrium version
+      description: From the release you installed, or Settings → About
+      placeholder: v1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Linux (X11)
+        - Linux (Wayland)
+        - Windows
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: ytdlp
+    attributes:
+      label: yt-dlp version
+      description: Output of `yt-dlp --version`
+      placeholder: 2026.10.15
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Search
+        2. Type "…"
+        3. Press play
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Anything printed on the terminal you launched the app from, plus screenshots.
+      render: shell
+    validations:
+      required: false

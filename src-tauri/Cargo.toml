@@ -1,0 +1,45 @@
+[package]
+name = "ytrium"
+version = "1.0.0"
+description = "Ytrium - local-first desktop music player"
+authors = ["Ytrium"]
+edition = "2021"
+# LazyLock (used for the provider regexes) needs 1.80.
+rust-version = "1.80"
+
+# The Tauri entry point lives in src/main.rs; everything else is the library so
+# it can be unit-tested and shared across platforms.
+[lib]
+name = "ytrium_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-window-state = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "sync", "io-util", "fs"] }
+# Blocking HTTP client: lyrics/charts metadata and, crucially, the byte-range
+# reader the audio decoder pulls from (it is synchronous by nature).
+ureq = { version = "3", features = ["json"] }
+url = "2"
+# Title/artist clean-up and id validation, matching the web build's patterns.
+regex = "1"
+# Audio decoding/playback. rodio's default features already include the
+# symphonia AAC + MP4 (M4A) decoders we need for the provider's audio format.
+rodio = { version = "0.23" }
+
+[features]
+# This feature is used for production builds or when a dev server is not
+# specified. DO NOT REMOVE.
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
