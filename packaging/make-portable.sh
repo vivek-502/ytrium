@@ -26,7 +26,7 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     -h | --help)
-      sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
@@ -40,7 +40,7 @@ cd "$ROOT"
 case "${TARGET:-$(rustc -vV | awk '/^host:/{print $2}')}" in
   x86_64-unknown-linux-*) ARCH="x64" ;;
   aarch64-unknown-linux-*) ARCH="arm64" ;;
-  *) echo "unsupported target for a Linux bundle: ${TARGET}" >&2; exit 1 ;;
+  *) echo "unsupported target for a Linux bundle: ${TARGET:-$(rustc -vV | awk '/^host:/{print $2}')}" >&2; exit 1 ;;
 esac
 
 # --------------------------------------------------------------- build binary

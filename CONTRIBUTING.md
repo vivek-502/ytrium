@@ -18,11 +18,14 @@ stream resolution, and decodes audio itself with `symphonia`/`rodio`.
 ## Before you open a pull request
 
 ```bash
-npm run typecheck                  # TypeScript
-cargo clippy --all-targets         # Rust, from src-tauri/
+npm run typecheck
+cd src-tauri && cargo clippy --all-targets -- -D warnings && cargo fmt --all -- --check
 cargo test --release -- --test-threads=1   # network/decode integration tests
 npm run app:build                  # the whole thing actually bundles
 ```
+
+Note the `cd src-tauri` on the second line: clippy, rustfmt and the tests all run from
+`src-tauri/`, which is where `Cargo.toml` lives.
 
 The integration tests in `src-tauri/src/devcheck.rs` talk to the real providers (YouTube via
 `yt-dlp`, iTunes, LRCLIB), so they need a working network and a current `yt-dlp`. There is also
