@@ -5,14 +5,15 @@
 //! Resolved media URLs live in memory only, keyed by the `expire=` value
 //! YouTube embeds, and are re-resolved on demand.
 
-use std::sync::OnceLock;
+use std::sync::{LazyLock, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use regex::Regex;
 use serde::Deserialize;
 
 use super::{
     album_id_for, artist_id_for, build_search_results, clean_title, split_title, strip_topic,
-    thumbnail_for, SearchResults, StreamSource, Track,
+    thumbnail_for, RemotePlaylist, SearchResults, StreamSource, Track,
 };
 use crate::cache::TtlCache;
 use crate::config;
@@ -24,6 +25,8 @@ use crate::ytdlp::{is_valid_video_id, parse_json_doc, parse_json_lines, run_ytdl
 static SEARCH_CACHE: OnceLock<TtlCache<SearchResults>> = OnceLock::new();
 static METADATA_CACHE: OnceLock<TtlCache<Option<Track>>> = OnceLock::new();
 static STREAM_CACHE: OnceLock<TtlCache<StreamSource>> = OnceLock::new();
+static PLAYLIST_CACHE: OnceLock<TtlCache<Vec<RemotePlaylist>>> = OnceLock::new();
+static PLAYLIST_TRACKS_CACHE: OnceLock<TtlCache<Vec<Track>>> = OnceLock::new();
 
 fn search_cache() -> &'static TtlCache<SearchResults> {
     SEARCH_CACHE.get_or_init(|| TtlCache::new(config::SEARCH_TTL, config::CACHE_MAX_ENTRIES))
@@ -33,6 +36,13 @@ fn metadata_cache() -> &'static TtlCache<Option<Track>> {
 }
 fn stream_cache() -> &'static TtlCache<StreamSource> {
     STREAM_CACHE.get_or_init(|| TtlCache::new(config::STREAM_TTL, config::CACHE_MAX_ENTRIES))
+}
+fn playlist_cache() -> &'static TtlCache<Vec<RemotePlaylist>> {
+    PLAYLIST_CACHE.get_or_init(|| TtlCache::new(config::SEARCH_TTL, config::CACHE_MAX_ENTRIES))
+}
+fn playlist_tracks_cache() -> &'static TtlCache<Vec<Track>> {
+    PLAYLIST_TRACKS_CACHE
+        .get_or_init(|| TtlCache::new(config::METADATA_TTL, config::CACHE_MAX_ENTRIES))
 }
 
 /* ------------------------------- yt-dlp json ------------------------------ */
@@ -52,6 +62,8 @@ pub(crate) struct Entry {
     thumbnail: Option<String>,
     thumbnails: Option<Vec<ThumbEntry>>,
     live_status: Option<String>,
+    /// Flat playlist entries carry the number of videos in the playlist.
+    playlist_count: Option<f64>,
     /* full metadata only */
     album: Option<String>,
     genre: Option<String>,
@@ -212,6 +224,209 @@ pub async fn search(query: &str, limit: usize) -> ApiResult<SearchResults> {
     let results = build_search_results(tracks);
     search_cache().set(&key, results.clone(), None);
     Ok(results)
+}
+
+/* ------------------------------- playlists -------------------------------- */
+
+/// `sp=EgIQAw%3D%3D` is YouTube's "filter: playlist" search parameter, so every
+/// entry the results page returns is a playlist rather than a video.
+const PLAYLIST_FILTER: &str = "EgIQAw%3D%3D";
+
+/// How many playlist results to attach to each search response.
+pub const PLAYLIST_SEARCH_LIMIT: usize = 12;
+
+/// Playlist ids are `PL`, `UU`, `OLAK5uy_` ... followed by 10+ url-safe chars.
+static PLAYLIST_ID_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[A-Za-z0-9_-]{12,64}$").expect("valid playlist id regex"));
+
+pub fn is_valid_playlist_id(id: &str) -> bool {
+    PLAYLIST_ID_RE.is_match(id)
+}
+
+/// Channels that are almost certainly the artist/label rather than a fan.
+static OFFICIAL_CHANNEL_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
+    [
+        r"(?i)\s*-\s*topic$", // YouTube's auto-generated artist channels
+        r"(?i)vevo$",
+        r"(?i)\bofficial\b",
+        r"(?i)\brecords?\b",
+        r"(?i)\bmusic\b",
+    ]
+    .iter()
+    .map(|p| Regex::new(p).expect("official channel regex"))
+    .collect()
+});
+
+/// Best-effort "is this an official playlist" test.
+///
+/// YouTube exposes no official flag, so we infer it: the channel must look like
+/// an artist/label channel (Topic, VEVO, "Official", a label) or match the
+/// artist we searched for. This is deliberately conservative - a false negative
+/// only means the playlist is hidden when "official only" is on.
+fn looks_official(owner: &str, query: &str) -> bool {
+    let channel = owner.trim();
+    if channel.is_empty() {
+        return false;
+    }
+    if OFFICIAL_CHANNEL_PATTERNS
+        .iter()
+        .any(|re| re.is_match(channel))
+    {
+        return true;
+    }
+    // A channel that starts with the artist we searched for ("Daft Punk").
+    let q = query.trim().to_lowercase();
+    if q.chars().count() >= 3 {
+        let c = channel.to_lowercase();
+        if c.starts_with(&q) || q.starts_with(&c) {
+            return true;
+        }
+    }
+    false
+}
+
+fn pick_playlist_thumb(e: &Entry) -> Option<String> {
+    if let Some(thumbs) = e.thumbnails.as_ref() {
+        if !thumbs.is_empty() {
+            let mut sorted: Vec<&ThumbEntry> = thumbs.iter().collect();
+            sorted.sort_by_key(|t| std::cmp::Reverse(t.preference.unwrap_or(0)));
+            if let Some(url) = sorted.first().and_then(|t| t.url.as_ref()) {
+                if !url.is_empty() {
+                    return Some(url.clone());
+                }
+            }
+        }
+    }
+    match e.thumbnail.as_deref() {
+        Some(thumb) if !thumb.is_empty() => Some(thumb.to_string()),
+        _ => None,
+    }
+}
+
+fn from_playlist_entry(e: &Entry, query: &str) -> Option<RemotePlaylist> {
+    let id = e.id.as_deref()?;
+    if !is_valid_playlist_id(id) {
+        return None;
+    }
+    let title = e.title.as_deref()?.trim();
+    if title.is_empty() {
+        return None;
+    }
+    let owner = e
+        .channel
+        .as_deref()
+        .or(e.uploader.as_deref())
+        .unwrap_or("")
+        .trim();
+    Some(RemotePlaylist {
+        id: id.to_string(),
+        title: title.to_string(),
+        owner: if owner.is_empty() {
+            "YouTube".to_string()
+        } else {
+            owner.to_string()
+        },
+        image: pick_playlist_thumb(e),
+        track_count: e.playlist_count.map(|c| c as usize),
+        official: looks_official(owner, query),
+        source: "youtube".to_string(),
+    })
+}
+
+/// The single-document shape `--dump-single-json` prints for a search page.
+#[derive(Debug, Clone, Default, Deserialize)]
+struct PlaylistDoc {
+    entries: Option<Vec<Entry>>,
+}
+
+/// Percent-encode like `encodeURIComponent` (unreserved bytes pass through).
+fn urlencode(input: &str) -> String {
+    let mut out = String::with_capacity(input.len() * 3);
+    for byte in input.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(byte as char)
+            }
+            _ => out.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    out
+}
+
+/// Search YouTube for playlists matching `query`.
+pub async fn search_playlists(query: &str, limit: usize) -> ApiResult<Vec<RemotePlaylist>> {
+    let limit = limit.clamp(1, 50);
+    let key = format!("plsearch::{limit}::{}", query.to_lowercase());
+    if let Some(hit) = playlist_cache().get(&key) {
+        return Ok(hit);
+    }
+
+    let url = format!(
+        "https://www.youtube.com/results?search_query={}&sp={PLAYLIST_FILTER}",
+        urlencode(query),
+    );
+    let end = (limit * 2).max(20).to_string();
+    let stdout = run_ytdlp(
+        &[
+            "--flat-playlist",
+            "--dump-single-json",
+            "--no-warnings",
+            "--skip-download",
+            "--playlist-end",
+            &end,
+            &url,
+        ],
+        config::ytdlp_timeout(),
+    )
+    .await?;
+
+    let doc = parse_json_doc::<PlaylistDoc>(&stdout);
+    let entries = doc.and_then(|d| d.entries).unwrap_or_default();
+    let playlists: Vec<RemotePlaylist> = entries
+        .iter()
+        .filter_map(|e| from_playlist_entry(e, query))
+        .take(limit)
+        .collect();
+    playlist_cache().set(&key, playlists.clone(), None);
+    Ok(playlists)
+}
+
+/// Fetch the videos inside a public playlist.
+///
+/// Flat extraction gives us video ids, titles, durations and thumbnails without
+/// downloading anything; the entries are normalized exactly like search results
+/// so they play through the normal stream resolver.
+pub async fn get_playlist_tracks(playlist_id: &str, limit: usize) -> ApiResult<Vec<Track>> {
+    if !is_valid_playlist_id(playlist_id) {
+        return Err(ApiError::invalid_input(Some(
+            "invalid playlist id".to_string(),
+        )));
+    }
+    let key = format!("{playlist_id}::{limit}");
+    if let Some(hit) = playlist_tracks_cache().get(&key) {
+        return Ok(hit);
+    }
+
+    let end = limit.to_string();
+    let url = format!("https://www.youtube.com/playlist?list={playlist_id}");
+    let stdout = run_ytdlp(
+        &[
+            "--flat-playlist",
+            "--dump-json",
+            "--no-warnings",
+            "--skip-download",
+            "--playlist-end",
+            &end,
+            &url,
+        ],
+        config::ytdlp_timeout(),
+    )
+    .await?;
+
+    let entries: Vec<Entry> = parse_json_lines(&stdout);
+    let tracks: Vec<Track> = entries.iter().filter_map(from_flat).collect();
+    playlist_tracks_cache().set(&key, tracks.clone(), None);
+    Ok(tracks)
 }
 
 /* --------------------------------- metadata ------------------------------- */

@@ -70,6 +70,26 @@ pub struct SearchResults {
     pub albums: Vec<Album>,
 }
 
+/// A public YouTube playlist as returned by search (`NormalizedPlaylist` in the
+/// web build's `providers/types.ts`).
+///
+/// `id` is the native playlist id (`PL...`), which is what track fetching and
+/// playback resolve against - there is no synthetic album id here.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemotePlaylist {
+    pub id: String,
+    pub title: String,
+    /// Channel/uploader that published the playlist.
+    pub owner: String,
+    pub image: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub track_count: Option<usize>,
+    /// Likely published by the artist/label rather than a random user.
+    pub official: bool,
+    pub source: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChartsResult {

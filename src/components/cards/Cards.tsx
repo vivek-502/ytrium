@@ -8,7 +8,7 @@ import { useLibraryStore } from "../../stores/libraryStore";
 import { provider } from "../../providers/apiProvider";
 import { context } from "../tracks/trackMenu";
 import { pluralize } from "../../lib/format";
-import type { Album, Artist, DailyMix, Playlist, Track } from "../../types";
+import type { Album, Artist, DailyMix, Playlist, RemotePlaylist, Track } from "../../types";
 
 /* ------------------------------------------------------------------- base */
 
@@ -228,6 +228,114 @@ export const PlaylistCard: React.FC<{ playlist: Playlist }> = ({ playlist }) => 
               },
             }),
         },
+      ]}
+    />
+  );
+};
+
+/* --------------------------------------------------- YouTube (remote) playlist */
+
+/**
+ * A public YouTube playlist from search.
+ *
+ * Its tracks live on YouTube, so both play and save fetch them first. Saving
+ * stores a normal local playlist (with `sourcePlaylistId`), so it then appears
+ * in Library > Playlists and works like any other playlist.
+ */
+export const RemotePlaylistCard: React.FC<{ playlist: RemotePlaylist }> = ({ playlist }) => {
+  const navigate = useNavigate();
+  const saved = useLibraryStore((s) => s.hasRemotePlaylist(playlist.id));
+  const save = useLibraryStore((s) => s.saveRemotePlaylist);
+  const [busy, setBusy] = useState(false);
+
+  /** Clicking the card opens the playlist page; it fetches the songs there. */
+  const href = `/ytplaylist/${encodeURIComponent(playlist.id)}?${new URLSearchParams({
+    title: playlist.title,
+    owner: playlist.owner || "",
+    ...(playlist.image ? { image: playlist.image } : {}),
+  }).toString()}`;
+
+  const loadTracks = async (): Promise<Track[] | null> => {
+    try {
+      const tracks = await provider.getPlaylistTracks(playlist.id);
+      if (!tracks.length) {
+        ui.toast("This playlist has no playable songs", "error");
+        return null;
+      }
+      return tracks;
+    } catch (err) {
+      ui.toast(
+        err instanceof Error ? err.message : "Could not load this playlist",
+        "error"
+      );
+      return null;
+    }
+  };
+
+  /** The play button streams straight away, without opening the page. */
+  const play = async () => {
+    setBusy(true);
+    const tracks = await loadTracks();
+    setBusy(false);
+    if (!tracks) return;
+    void usePlayerStore
+      .getState()
+      .playTracks(
+        tracks,
+        0,
+        context(playlist.title, "playlist", null)
+      );
+  };
+
+  const saveToLibrary = async () => {
+    if (saved) {
+      ui.toast("Already in your library", "info");
+      return;
+    }
+    setBusy(true);
+    const tracks = await loadTracks();
+    setBusy(false);
+    if (!tracks) return;
+    save(playlist, tracks);
+    ui.toast(`Saved “${playlist.title}” to your library`, "success");
+  };
+
+  const subtitle = saved
+    ? "In your library"
+    : playlist.owner || "YouTube playlist";
+
+  return (
+    <MediaCard
+      title={playlist.title}
+      subtitle={subtitle}
+      image={playlist.image}
+      badge={playlist.official ? "Official" : undefined}
+      ariaLabel={`Open YouTube playlist ${playlist.title}`}
+      href={href}
+      onPlay={busy ? undefined : () => void play()}
+      menu={[
+        {
+          label: "Open playlist",
+          icon: <Icon name="list" size={15} />,
+          onSelect: () => navigate(href),
+        },
+        {
+          label: "Play now",
+          icon: <Icon name="play" size={15} />,
+          onSelect: () => void play(),
+        },
+        saved
+          ? {
+              label: "In your library",
+              icon: <Icon name="check" size={15} />,
+              disabled: true,
+              onSelect: () => {},
+            }
+          : {
+              label: "Save to library",
+              icon: <Icon name="plus" size={15} />,
+              onSelect: () => void saveToLibrary(),
+            },
       ]}
     />
   );

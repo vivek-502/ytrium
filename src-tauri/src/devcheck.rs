@@ -254,3 +254,68 @@ async fn decoder_reads_and_seeks() {
 
     control.cancel();
 }
+
+/// Playlist search (v1.1.0): `/api/search` attaches playlists, an artist rail
+/// resolves, and the first playlist expands into playable tracks.
+#[tokio::test]
+async fn playlist_search_and_expansion() {
+    let out = api::dispatch("GET", "/api/search?q=daft%20punk&limit=5", None)
+        .await
+        .expect("search failed");
+    let playlists = out["playlists"].as_array().expect("playlists array");
+    println!("[search] {} playlists", playlists.len());
+    assert!(!playlists.is_empty(), "no playlist results: {out}");
+
+    let first = &playlists[0];
+    assert!(first["id"].is_string(), "playlist id missing: {first}");
+    assert!(first["title"].is_string(), "playlist title missing: {first}");
+    assert!(first["owner"].is_string(), "playlist owner missing: {first}");
+    assert!(first["official"].is_boolean(), "official flag missing: {first}");
+    assert_eq!(first["source"], "youtube");
+
+    // Native playlist ids are URL-safe, so they pass through unescaped.
+    let id = first["id"].as_str().expect("playlist id str");
+    let tracks = api::dispatch("GET", &format!("/api/playlists/{id}/tracks?limit=10"), None)
+        .await
+        .expect("playlist tracks failed");
+    let count = tracks["tracks"].as_array().map(Vec::len).unwrap_or(0);
+    println!("[playlist] {id} -> {count} tracks");
+    assert!(count > 0, "playlist {id} expanded to nothing: {tracks}");
+
+    let rail = api::dispatch("GET", "/api/artist/playlists?name=daft%20punk&limit=5", None)
+        .await
+        .expect("artist playlists failed");
+    let rail_count = rail["playlists"].as_array().map(Vec::len).unwrap_or(0);
+    println!("[artist playlists] {rail_count} results");
+    assert!(rail_count > 0, "artist playlist rail empty: {rail}");
+}
+
+/// Offline error parity for the playlist routes (messages match the web build).
+#[tokio::test]
+async fn playlist_route_errors() {
+    let err = api::dispatch("GET", "/api/playlists/not-a-playlist/tracks", None)
+        .await
+        .unwrap_err();
+    assert_eq!(err.code, "NOT_FOUND");
+    assert_eq!(err.status, 404);
+    assert_eq!(err.message, "That playlist could not be loaded.");
+
+    let err = api::dispatch(
+        "GET",
+        "/api/playlists/PL01234567890ABCD/tracks?limit=0",
+        None,
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err.code, "INVALID_INPUT");
+    assert_eq!(err.status, 400);
+
+    let err = api::dispatch("GET", "/api/artist/playlists", None)
+        .await
+        .unwrap_err();
+    assert_eq!(err.code, "INVALID_INPUT");
+    assert_eq!(err.status, 400);
+
+    let err = api::dispatch("GET", "/api/playlists/x", None).await.unwrap_err();
+    assert_eq!(err.code, "NOT_FOUND");
+}

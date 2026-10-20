@@ -1,6 +1,6 @@
 {
   "name": "ytrium",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "Ytrium - a local-first desktop music player (Tauri 2 + Rust)",

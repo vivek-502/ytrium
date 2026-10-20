@@ -151,7 +151,9 @@ pub async fn dispatch(method: &str, raw_path: &str, body: Option<Value>) -> ApiR
         ("GET", ["search"]) => search(&params).await,
         ("GET", ["resolve"]) | ("POST", ["resolve"]) => resolve(&params, &body).await,
         ("GET", ["tracks", id]) => track(id).await,
+        ("GET", ["playlists", id, "tracks"]) => playlist_tracks(id, &params).await,
         ("GET", ["artist"]) => artist(&params).await,
+        ("GET", ["artist", "playlists"]) => artist_playlists(&params).await,
         ("GET", ["album"]) => album(&params).await,
         ("GET", ["charts"]) => to_value(charts::get_charts().await?),
         ("GET", ["trending"]) => trending(&params).await,
@@ -195,13 +197,50 @@ async fn search(params: &HashMap<String, String>) -> ApiResult<Value> {
         crate::config::search_limit(),
         50,
     )?;
-    let results = youtube::search(&query, limit).await?;
+    // Playlist search runs alongside the video search. A failure here must
+    // never break song results, so it degrades to an empty list.
+    let (results, playlists) = tokio::join!(
+        youtube::search(&query, limit),
+        youtube::search_playlists(&query, youtube::PLAYLIST_SEARCH_LIMIT)
+    );
+    let results = results?;
+    let playlists = playlists.unwrap_or_default();
     let mut value = to_value(results)?;
     if let Some(map) = value.as_object_mut() {
+        map.insert("playlists".to_string(), to_value(playlists)?);
         map.insert("query".to_string(), Value::String(query));
         map.insert("source".to_string(), Value::String("youtube".to_string()));
     }
     Ok(value)
+}
+
+/// `GET /api/playlists/:id/tracks`
+///
+/// Expands a public YouTube playlist into normalized tracks so a saved playlist
+/// plays through the normal stream resolver.
+async fn playlist_tracks(raw_id: &str, params: &HashMap<String, String>) -> ApiResult<Value> {
+    let id = raw_id.trim();
+    let limit = parse_limit(params.get("limit").map(String::as_str), 200, 500)?;
+    match youtube::get_playlist_tracks(id, limit).await {
+        Err(_) => Err(ApiError::not_found("That playlist could not be loaded.")),
+        Ok(tracks) if tracks.is_empty() => Err(ApiError::not_found(
+            "That playlist is empty or unavailable.",
+        )),
+        Ok(tracks) => Ok(json!({ "tracks": crate::providers::dedupe_tracks(tracks) })),
+    }
+}
+
+/// `GET /api/artist/playlists?name=<artist>&limit=`
+///
+/// Playlists published by (or matching) an artist, used by the artist page's
+/// "Playlists" rail. Degrades to an empty list, as on the web build.
+async fn artist_playlists(params: &HashMap<String, String>) -> ApiResult<Value> {
+    let name = sanitize_query(params.get("name").map(String::as_str), 120)?;
+    let limit = parse_limit(params.get("limit").map(String::as_str), 12, 24)?;
+    let playlists = youtube::search_playlists(&name, limit)
+        .await
+        .unwrap_or_default();
+    Ok(json!({ "playlists": playlists }))
 }
 
 async fn resolve(params: &HashMap<String, String>, body: &Value) -> ApiResult<Value> {

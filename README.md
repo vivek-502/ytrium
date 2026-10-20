@@ -34,11 +34,15 @@ build with local user accounts? That is [ytrium-web](https://github.com/vivek-50
 ## Highlights
 
 - 🔎 **Discovery** — full-text search with recent-search history, home sections (trending,
-  popular, new releases, recommended for you, quick picks), and artist and album pages with
-  related artists. Charts come from Apple's public iTunes RSS.
+  popular, new releases, recommended for you, quick picks), and artist pages with related
+  artists. Search surfaces public YouTube playlists alongside songs and artists; an optional
+  *Official playlists only* setting keeps just artist/label-published ones. Opening a playlist
+  shows every song on its own page, from where it can be played, shuffled, or saved into your
+  library — saving fetches its tracks so it then behaves like any other playlist.
+  Charts come from Apple's public iTunes RSS.
 - 📚 **Library** — liked songs, playlists (create, rename, edit, delete, drag-and-drop
-  reordering), saved albums, followed artists, recently played grouped by day, and per-track
-  play signals that feed recommendations.
+  reordering, plus YouTube playlists saved from search), followed artists, recently played
+  grouped by day, and per-track play signals that feed recommendations.
 - 🎧 **Real player** — play/pause, next/previous, seek bar, volume and mute, shuffle, repeat
   (off → all → one), a queue you can reorder, one-tap retry on stream errors, autoplay and
   cross-track fades. Audio is decoded in Rust (`symphonia`) and played through `rodio`.
@@ -78,7 +82,7 @@ version, or remove it again:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/vivek-502/ytrium/master/scripts/install.sh | bash -s -- --with-deps
-curl -fsSL https://raw.githubusercontent.com/vivek-502/ytrium/master/scripts/install.sh | bash -s -- v1.0.0
+curl -fsSL https://raw.githubusercontent.com/vivek-502/ytrium/master/scripts/install.sh | bash -s -- v1.1.0
 curl -fsSL https://raw.githubusercontent.com/vivek-502/ytrium/master/scripts/install.sh | bash -s -- --uninstall
 ```
 
@@ -86,13 +90,13 @@ Prefer a real package? The release also carries a **Debian package** (`Ytrium_<v
 for Debian/Ubuntu/Mint, and [`packaging/arch/PKGBUILD`](packaging/arch/PKGBUILD) builds it on Arch:
 
 ```bash
-sudo apt install ./Ytrium_1.0.0_amd64.deb        # Debian / Ubuntu
+sudo apt install ./Ytrium_1.1.0_amd64.deb        # Debian / Ubuntu
 cp packaging/arch/PKGBUILD . && makepkg -si      # Arch
 ```
 
 ### Windows
 
-Download **`Ytrium_1.0.0_x64-setup.exe`** from the [latest release](https://github.com/vivek-502/ytrium/releases/latest)
+Download **`Ytrium_1.1.0_x64-setup.exe`** from the [latest release](https://github.com/vivek-502/ytrium/releases/latest)
 and run it. Windows may show a SmartScreen warning because the installer is not code-signed yet:
 *More info* → *Run anyway*.
 
