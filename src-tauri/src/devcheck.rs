@@ -268,9 +268,18 @@ async fn playlist_search_and_expansion() {
 
     let first = &playlists[0];
     assert!(first["id"].is_string(), "playlist id missing: {first}");
-    assert!(first["title"].is_string(), "playlist title missing: {first}");
-    assert!(first["owner"].is_string(), "playlist owner missing: {first}");
-    assert!(first["official"].is_boolean(), "official flag missing: {first}");
+    assert!(
+        first["title"].is_string(),
+        "playlist title missing: {first}"
+    );
+    assert!(
+        first["owner"].is_string(),
+        "playlist owner missing: {first}"
+    );
+    assert!(
+        first["official"].is_boolean(),
+        "official flag missing: {first}"
+    );
     assert_eq!(first["source"], "youtube");
 
     // Native playlist ids are URL-safe, so they pass through unescaped.
@@ -282,9 +291,13 @@ async fn playlist_search_and_expansion() {
     println!("[playlist] {id} -> {count} tracks");
     assert!(count > 0, "playlist {id} expanded to nothing: {tracks}");
 
-    let rail = api::dispatch("GET", "/api/artist/playlists?name=daft%20punk&limit=5", None)
-        .await
-        .expect("artist playlists failed");
+    let rail = api::dispatch(
+        "GET",
+        "/api/artist/playlists?name=daft%20punk&limit=5",
+        None,
+    )
+    .await
+    .expect("artist playlists failed");
     let rail_count = rail["playlists"].as_array().map(Vec::len).unwrap_or(0);
     println!("[artist playlists] {rail_count} results");
     assert!(rail_count > 0, "artist playlist rail empty: {rail}");
@@ -316,6 +329,8 @@ async fn playlist_route_errors() {
     assert_eq!(err.code, "INVALID_INPUT");
     assert_eq!(err.status, 400);
 
-    let err = api::dispatch("GET", "/api/playlists/x", None).await.unwrap_err();
+    let err = api::dispatch("GET", "/api/playlists/x", None)
+        .await
+        .unwrap_err();
     assert_eq!(err.code, "NOT_FOUND");
 }
